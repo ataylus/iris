@@ -1,0 +1,10 @@
+services:
+  neko:
+    volumes:
+      - profile:/home/neko/.config/google-chrome
+      - ./stack/chrome-saved-policies.json:/etc/opt/chrome/policies/managed/policies.json:ro
+      # The stock launch flags include --bwsi (guest mode), which discards the profile on exit.
+      - ./stack/chrome-saved-${IRIS_ENCODER:-cpu}.conf:/etc/neko/supervisord/google-chrome.conf:ro
+
+volumes:
+  profile:

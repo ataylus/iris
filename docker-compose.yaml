@@ -1,0 +1,65 @@
+name: iris
+
+# Base stack. Iris layers stack\gpu.yaml (NVIDIA encoding) and stack\saved.yaml (kept profile) on top.
+services:
+  neko:
+    image: ghcr.io/m1k1o/neko/google-chrome:latest
+    shm_size: 2gb
+    # The image allows 1s, which kills Chrome before it saves open tabs.
+    stop_grace_period: 15s
+    # The image checks every 10s; probing every second while starting gets the party live sooner.
+    healthcheck:
+      start_period: 60s
+      start_interval: 1s
+    mem_limit: 6g
+    pids_limit: 4096
+    security_opt: [no-new-privileges:true]
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: 1
+    volumes:
+      - ./data:/data:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:59000:59000/tcp"
+      - "${TS_IP:?open Iris from its shortcut}:59000:59000/udp"
+    environment:
+      NEKO_DESKTOP_SCREEN: 1920x1080@30
+      NEKO_MEMBER_PROVIDER: file
+      NEKO_MEMBER_FILE_PATH: /data/members.json
+      NEKO_WEBRTC_UDPMUX: 59000
+      NEKO_WEBRTC_TCPMUX: 59000
+      NEKO_WEBRTC_ICELITE: 1
+      NEKO_WEBRTC_NAT1TO1: ${TS_IP}
+      # Dead-end STUN (reserved TEST-NET address): an empty list falls back to Google, loopback hangs Firefox viewers.
+      NEKO_WEBRTC_ICESERVERS_FRONTEND: '[{"urls":["stun:192.0.2.1:3478"]}]'
+      NEKO_WEBRTC_ICESERVERS_BACKEND: '[{"urls":["stun:192.0.2.1:3478"]}]'
+      NEKO_CAPTURE_VIDEO_CODEC: h264
+      NEKO_CAPTURE_VIDEO_IDS: main
+      NEKO_CAPTURE_VIDEO_PIPELINES: >-
+        {"main": "ximagesrc display-name={display} show-pointer=false use-damage=false ! video/x-raw,framerate=30/1
+        ! videoconvert n-threads=4 ! video/x-raw,format=I420 ! queue max-size-buffers=1 leaky=downstream
+        ! x264enc threads=8 bitrate=8000 vbv-buf-capacity=300 key-int-max=60 bframes=0 byte-stream=true tune=zerolatency speed-preset=veryfast
+        ! video/x-h264,stream-format=byte-stream,profile=constrained-baseline ! appsink name=appsink"}
+      NEKO_CAPTURE_AUDIO_PIPELINE: >-
+        pulsesrc device={device} ! audio/x-raw,channels=2 ! audioconvert ! queue max-size-buffers=5 leaky=downstream
+        ! opusenc inband-fec=true bitrate=192000 ! appsink name=appsink
+
+  # One-shot: stops the shared browser from reaching this laptop, the home network or the tailnet.
+  firewall:
+    build:
+      dockerfile_inline: |
+        FROM alpine:3.22
+        RUN apk add --no-cache iptables
+    network_mode: service:neko
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW]
+    command:
+      - sh
+      - -ec
+      - |
+        iptables -F OUTPUT
+        iptables -A OUTPUT -o lo -j ACCEPT
+        iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+        for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 100.64.0.0/10; do
+          iptables -A OUTPUT -d $$net -j REJECT
+        done

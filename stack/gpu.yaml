@@ -1,0 +1,13 @@
+services:
+  neko:
+    image: ghcr.io/m1k1o/neko/nvidia-google-chrome:latest
+    gpus: all
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: all
+      NEKO_DESKTOP_SCREEN: 1920x1080@60
+      # nvautogpuh264enc, not nvh264enc: drivers 590+ dropped the legacy presets nvh264enc relies on.
+      NEKO_CAPTURE_VIDEO_PIPELINES: >-
+        {"main": "ximagesrc display-name={display} show-pointer=false use-damage=false ! video/x-raw,framerate=60/1
+        ! videoconvert n-threads=4 ! video/x-raw,format=NV12 ! queue max-size-buffers=1 leaky=downstream
+        ! nvautogpuh264enc preset=p4 tune=ultra-low-latency rate-control=cbr bitrate=10000 vbv-buffer-size=10000 gop-size=120 b-frames=0 zero-reorder-delay=true repeat-sequence-header=true
+        ! video/x-h264,stream-format=byte-stream,profile=constrained-baseline ! appsink name=appsink"}

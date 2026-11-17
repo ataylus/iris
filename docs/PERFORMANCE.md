@@ -1,0 +1,87 @@
+# Performance
+
+Measured on 2026-11-17 on this laptop: Ryzen 7 7840HS (16 threads), RTX 4060 Laptop GPU
+(driver 610.74), Docker Desktop on WSL2. Upload 63 Mbps, download 101 Mbps (Cloudflare speed test).
+
+## How it was measured
+
+`tools/bench.mjs` starts a neko container per configuration, plays a 1080p test video in the shared
+browser, joins as a viewer from a windowless Edge, and samples for 10 seconds:
+
+| Metric | Source |
+|---|---|
+| Stream fps, Mbps | Viewer's WebRTC stats (`framesDecoded`, `bytesReceived`) |
+| Jitter buffer | Viewer's `jitterBufferDelay / jitterBufferEmittedCount`; the delay the viewer adds to smooth arrival |
+| Freezes, lost packets | Viewer's WebRTC stats |
+| Container CPU | `docker stats`, where 100% is one core |
+| GPU | `nvidia-smi` inside the container (overall %, encoder %) |
+
+Viewer-side numbers come from a headless browser on the same laptop, so they reflect the
+encoder and stream, not a real internet path.
+
+## Results
+
+| Configuration | Stream fps | Mbps | Container CPU | GPU | Notes |
+|---|---|---|---|---|---|
+| Original (Firefox, VP8, neko defaults) | 22.6 | 1.9 to 6.9 | 3.1 to 5.6 cores | | Capped at 25 fps |
+| Firefox, x264 30 fps, 8 Mbps | 26.9 | 7.2 | 3.5 cores | | |
+| Firefox, x264 60 fps, 10 Mbps | 54.1 | 9.0 | 5.1 cores | | Too hot for a laptop |
+| Firefox, NVENC 60 fps, 10 Mbps | 53.9 | 7.2 | 1.0 core | 12%, encoder 27% | |
+| **Chrome, NVENC 60 fps, 10 Mbps** | **53.9** | **7.3** | **0.9 core** | **13%, encoder 27%** | **Chosen** |
+
+All configurations: 1080p, no freezes, no lost packets. The shared browser itself rendered at a
+steady 60 fps in every test.
+
+The stream tops out around 54 fps rather than 60. Every configuration hit the same ceiling, so it
+is the screen capture (`ximagesrc`) or the headless viewer, not the encoder.
+
+## Final check on the running Iris
+
+Joining as a guest from a windowless Firefox while 1080p video played:
+
+| Stream fps | Mbps | Jitter buffer | Freezes | Lost | Audio | GPU | Container CPU |
+|---|---|---|---|---|---|---|---|
+| 54 | 9.0 | 18 ms | 0 | 0 | Yes | 13%, encoder 27% | 1.1 cores |
+
+Edge gave the same result.
+
+## Timings
+
+Measured 2026-11-18 through the window, with the images already downloaded:
+
+| Action | Time |
+|---|---|
+| Containers created to shared browser healthy | 13 s (the health check probes every second while starting) |
+| Opening Iris while a party is already running | 3 s |
+| Switching Saved/Fresh | 15 to 21 s |
+| End party | 4 s |
+
+## DRM
+
+`tools/drm.mjs` asks each shared browser for Widevine from a secure `localhost` page:
+
+| Browser | Widevine |
+|---|---|
+| Chrome (`google-chrome`) | Yes |
+| Firefox (`firefox`) | No (`NotSupportedError`) |
+
+Streaming services typically limit software Widevine (L3) on Linux to 720p, and some refuse it.
+That has not been tested against real services.
+
+## What "no lag" means here
+
+Streaming a browser always adds some delay: capture, encode, network and decode. The settings keep
+each step short (zero-latency encoder tuning, no B-frames, a one-frame queue that drops instead of
+waiting, UDP first). The part Iris cannot control is the internet path between you and a guest.
+Tailscale connects directly when it can and relays when it cannot; a relayed connection adds
+noticeable delay. Check with `tailscale ping <guest-device>` during a party: `via DERP` means relayed.
+
+## Rerunning
+
+From the `tools` folder, with Iris stopped or running (the benchmark uses its own ports 8090 and 59010):
+
+```powershell
+node bench.mjs baseline nvenc_chrome      # any names from the configs list in bench.mjs
+node viewer.mjs firefox "<invite link>"    # measures a live Iris as that guest
+node drm.mjs google-chrome                 # Widevine check
+```
