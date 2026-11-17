@@ -63,3 +63,5 @@ services:
         for net in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 100.64.0.0/10; do
           iptables -A OUTPUT -d $$net -j REJECT
         done
+        # Iris reads this: a tick other than 10000 means something in WSL is warping the clock, which makes video stutter.
+        adjtimex 2>&1 | grep tick || true

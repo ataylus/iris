@@ -83,6 +83,7 @@ $startParty = {
                 docker compose down *> $null
                 throw 'The network lockdown failed, so the party was stopped to stay safe. Open Iris again to retry.'
             }
+            $state.ClockOff = (docker logs iris-firewall-1 2>&1 | Out-String) -match 'tick:\s+(\d+)' -and [math]::Abs([int]$Matches[1] - 10000) -gt 50
             $state.Lockdown = 'done'
 
             $state.Browser = 'busy'
@@ -335,7 +336,7 @@ function Update-View {
         if ($script:shownLive) { return }
         $script:shownLive = $true
         $ui.Headline.Text = "You're live"
-        $ui.Sub.Text = if ($script:switching) { 'Back live. Everyone, you included, needs to refresh their page.' } elseif ($state.Gpu) { 'Copy a link for your guest, then press play.' } else { 'Running without the graphics card, so the picture is capped at 30 fps.' }
+        $ui.Sub.Text = if ($state.ClockOff) { "Live, but this laptop's Linux clock is running at the wrong speed, so video will stutter. See Troubleshooting." } elseif ($script:switching) { 'Back live. Everyone, you included, needs to refresh their page.' } elseif ($state.Gpu) { 'Copy a link for your guest, then press play.' } else { 'Running without the graphics card, so the picture is capped at 30 fps.' }
         $script:switching = $null
         $ui.OpenView.IsEnabled = $true
         $ui.Pupil.Opacity = 1

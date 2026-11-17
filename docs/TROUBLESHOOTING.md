@@ -19,6 +19,7 @@
 | Guest: "session already connected" | Their account is open on another device or tab | Close the other one |
 | Page loads but the video spins forever | Browser cannot complete the video connection | Refresh once. If it persists, see "Video never connects" below |
 | No sound, or a play button over the video | The browser blocked autoplay | Click the video once |
+| "Linux clock is running at the wrong speed", or motion judders | A time service in a WSL distro is warping the shared kernel clock | See "WSL clock" below |
 | Laggy or blocky picture | Relayed Tailscale connection, slow network, or TCP fallback | See "Lag" below |
 | A streaming site refuses to play | The site blocks Linux or software DRM | Try another site, or a sync extension for that one |
 
@@ -40,6 +41,26 @@ fails on driver 590 and later with "Selected preset not supported".
 Chrome needs a few seconds to write its open tabs on exit. The compose file allows 15 seconds.
 Quitting Docker Desktop or shutting down Windows with the party running can still cut it short;
 cookies usually survive, open tabs may not.
+
+### WSL clock
+
+Docker Desktop and every WSL distro share one Linux kernel, and Hyper-V keeps its time in step with
+Windows. If a distro also runs its own time service, the two fight and the kernel clock runs at the
+wrong speed. The video then comes out at about 54 fps with periodic hitches. Check (10000 is normal):
+
+```powershell
+docker run --rm alpine:3 adjtimex | Select-String tick
+```
+
+The fix that worked here, for the Ubuntu distro:
+
+```powershell
+wsl -d Ubuntu-24.04 -u root -- systemctl disable --now systemd-timesyncd
+wsl --shutdown
+```
+
+Then reopen Docker Desktop. To undo: `systemctl enable --now systemd-timesyncd` inside Ubuntu.
+Check any other distros for `systemd-timesyncd`, `chrony` or `ntp`.
 
 ### Video never connects
 

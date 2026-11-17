@@ -32,8 +32,8 @@ encoder and stream, not a real internet path.
 All configurations: 1080p, no freezes, no lost packets. The shared browser itself rendered at a
 steady 60 fps in every test.
 
-The stream tops out around 54 fps rather than 60. Every configuration hit the same ceiling, so it
-is the screen capture (`ximagesrc`) or the headless viewer, not the encoder.
+Every configuration above stopped at 54 fps. That turned out not to be Iris at all: see "The 54 fps
+clock bug" below. With it fixed, the chosen configuration delivers 60.
 
 ## Final check on the running Iris
 
@@ -44,6 +44,37 @@ Joining as a guest from a windowless Firefox while 1080p video played:
 | 54 | 9.0 | 18 ms | 0 | 0 | Yes | 13%, encoder 27% | 1.1 cores |
 
 Edge gave the same result.
+
+## The 54 fps clock bug
+
+Watching on the laptop felt slightly juddery even though every number above looked clean. Averages
+hide uneven frame timing, so `viewer.mjs` and `bench.mjs` now also report `frameGapMs` and
+`frameGapSpreadMs`. Tracing frames step by step on 2026-11-17:
+
+| Where | Frames per second |
+|---|---|
+| Screen capture (`ximagesrc` debug log) | 60 |
+| Encoder output reaching neko (`appsink` debug log) | 60 |
+| Packets leaving the container (`tcpdump` RTP timestamps) | 60, by the container's clock |
+| Viewer, UDP or TCP, Edge or Firefox | 54, by Windows' clock, with zero packets lost |
+
+Everything was scaled by exactly 0.9 (asking for 30 gave 27), regardless of encoder, resolution or
+browser. The kernel's `adjtimex` showed `tick: 9167` instead of 10000: the shared WSL2 kernel was
+running its clock at 92% speed, and Hyper-V snapped it back every few seconds. The cause was
+`systemd-timesyncd` in the Ubuntu WSL distro fighting Hyper-V's own time sync. All WSL distros and
+Docker Desktop share that one kernel, so Ubuntu's service skewed the clock inside the containers too.
+
+Disabling it (see TROUBLESHOOTING.md) fixed it:
+
+| | Before | After |
+|---|---|---|
+| Stream fps | 54 | 59.9 |
+| Gap between frames | 18.5 ms | 16.7 ms |
+| Viewer jitter buffer | 60 to 120 ms | 39 ms |
+
+Changing the kernel clock source (`clocksource=hyperv_clocksource_tsc_page` in `.wslconfig`) was
+tried first and did not help, so it was reverted. Iris now reads the kernel tick on every start and
+warns in the window if it is off by more than 0.5%.
 
 ## Timings
 

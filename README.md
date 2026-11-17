@@ -13,7 +13,9 @@ Named after the Greek goddess of the rainbow, messenger of the gods.
 You need Windows 11 with [Docker Desktop](https://www.docker.com/products/docker-desktop/) and
 [Tailscale](https://tailscale.com/download) installed and signed in, and
 [HTTPS certificates](https://tailscale.com/kb/1153/enabling-https) turned on for your tailnet. An
-NVIDIA graphics card with a recent driver is optional and gives 60 fps.
+NVIDIA graphics card with a recent driver is optional and gives 60 fps. If you use other WSL
+distros, make sure none runs its own time service; it warps Docker's clock and makes video stutter
+(see [WSL clock](docs/TROUBLESHOOTING.md#wsl-clock)).
 
 1. Download or clone this folder somewhere permanent.
 2. In PowerShell, in the folder: `powershell -ExecutionPolicy Bypass -File .\Iris.ps1 -Install`.

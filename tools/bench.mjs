@@ -18,14 +18,13 @@ requestAnimationFrame(f)}requestAnimationFrame(f)</script></body>`;
 const x264 = (fps, kbps, preset) => `ximagesrc display-name={display} show-pointer=false use-damage=false ! video/x-raw,framerate=${fps}/1 ! videoconvert ! video/x-raw,format=I420 ! queue max-size-buffers=1 leaky=downstream ! x264enc threads=8 bitrate=${kbps} vbv-buf-capacity=300 key-int-max=${fps * 2} bframes=0 byte-stream=true tune=zerolatency speed-preset=${preset} ! video/x-h264,stream-format=byte-stream,profile=constrained-baseline ! appsink name=appsink`;
 const nvenc = (fps, kbps) => `ximagesrc display-name={display} show-pointer=false use-damage=false ! video/x-raw,framerate=${fps}/1 ! videoconvert n-threads=4 ! video/x-raw,format=NV12 ! queue max-size-buffers=1 leaky=downstream ! nvautogpuh264enc preset=p4 tune=ultra-low-latency rate-control=cbr bitrate=${kbps} vbv-buffer-size=${kbps} gop-size=${fps * 2} b-frames=0 zero-reorder-delay=true repeat-sequence-header=true ! video/x-h264,stream-format=byte-stream,profile=constrained-baseline ! appsink name=appsink`;
 
-// "direct" loads the video URL itself instead of the test page (Chrome's policy blocks file:// pages).
 const configs = {
   baseline:      { image: 'firefox', fps: 30 },
   x264_30:       { image: 'firefox', fps: 30, codec: 'h264', pipeline: x264(30, 8000, 'veryfast') },
   x264_60:       { image: 'firefox', fps: 60, codec: 'h264', pipeline: x264(60, 10000, 'veryfast') },
-  nvenc_firefox: { image: 'nvidia-firefox', gpu: true, fps: 60, codec: 'h264', direct: true, pipeline: nvenc(60, 10000) },
-  nvenc_chrome:  { image: 'nvidia-google-chrome', gpu: true, fps: 60, codec: 'h264', direct: true, pipeline: nvenc(60, 10000) },
-  cpu_chrome:    { image: 'google-chrome', fps: 30, codec: 'h264', direct: true, pipeline: x264(30, 8000, 'veryfast') },
+  nvenc_firefox: { image: 'nvidia-firefox', gpu: true, fps: 60, codec: 'h264', pipeline: nvenc(60, 10000) },
+  nvenc_chrome:  { image: 'nvidia-google-chrome', gpu: true, fps: 60, codec: 'h264', pipeline: nvenc(60, 10000) },
+  cpu_chrome:    { image: 'google-chrome', fps: 30, codec: 'h264', pipeline: x264(30, 8000, 'veryfast') },
 };
 
 async function cdp(wsUrl) {
@@ -43,7 +42,7 @@ const viewerStats = `(async () => {
   const v = document.querySelector('video'); const out = {};
   if (v) { const q = v.getVideoPlaybackQuality(); Object.assign(out, { w: v.videoWidth, h: v.videoHeight, shown: q.totalVideoFrames, dropped: q.droppedVideoFrames }); }
   for (const pc of window.__pcs || []) { const s = await pc.getStats(); s.forEach(r => {
-    if (r.type === 'inbound-rtp' && r.kind === 'video') Object.assign(out, { decoded: r.framesDecoded, bytes: r.bytesReceived, jb: r.jitterBufferDelay, jbn: r.jitterBufferEmittedCount, dec: r.totalDecodeTime, freezes: r.freezeCount, decoder: r.decoderImplementation, lost: r.packetsLost });
+    if (r.type === 'inbound-rtp' && r.kind === 'video') Object.assign(out, { decoded: r.framesDecoded, bytes: r.bytesReceived, jb: r.jitterBufferDelay, jbn: r.jitterBufferEmittedCount, dec: r.totalDecodeTime, freezes: r.freezeCount, decoder: r.decoderImplementation, lost: r.packetsLost, ifd: r.totalInterFrameDelay, ifd2: r.totalSquaredInterFrameDelay });
     if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') out.rtt = r.currentRoundTripTime;
   }); }
   return out; })()`;
@@ -63,14 +62,16 @@ async function run(name) {
   for (let i = 0; i < 60 && sh('docker', ['inspect', '-f', '{{.State.Health.Status}}', 'iris-bench']) !== 'healthy'; i++) await sleep(2000);
 
   const env = { ...process.env, MSYS_NO_PATHCONV: '1' };
-  sh('docker', ['exec', '-i', 'iris-bench', 'sh', '-c', 'cat > /tmp/bench.html'], { input: page, env });
+  sh('docker', ['exec', '-i', 'iris-bench', 'sh', '-c', 'mkdir -p /tmp/b && cat > /tmp/b/bench.html'], { input: page, env });
+  // Served over localhost because Chrome's policy blocks file:// pages.
+  spawn('docker', ['exec', '-d', 'iris-bench', 'python3', '-m', 'http.server', '8765', '-d', '/tmp/b'], { env, stdio: 'ignore' });
   const xdo = (...a) => shSafe('docker', ['exec', '-u', 'neko', '-e', 'DISPLAY=:99.0', 'iris-bench', 'xdotool', ...a], { env });
   await sleep(12000);
   const cls = c.image.includes('chrome') ? 'google-chrome' : 'firefox';
   xdo('search', '--onlyvisible', '--class', cls, 'windowactivate', '--sync', 'key', '--clearmodifiers', 'ctrl+t');
   await sleep(1000);
   xdo('key', '--clearmodifiers', 'ctrl+l');
-  xdo('type', '--delay', '10', c.direct ? VIDEO : 'file:///tmp/bench.html');
+  xdo('type', '--delay', '10', 'http://localhost:8765/bench.html');
   xdo('key', 'Return');
   await sleep(2000);
   xdo('key', 'F11');
@@ -112,6 +113,9 @@ async function run(name) {
     streamFps: b.decoded != null ? +((b.decoded - a.decoded) / secs).toFixed(1) : null,
     streamMbps: b.bytes != null ? +(((b.bytes - a.bytes) * 8) / secs / 1e6).toFixed(2) : null,
     jitterBufferMs: b.jbn > a.jbn ? +(((b.jb - a.jb) / (b.jbn - a.jbn)) * 1000).toFixed(1) : null,
+    // Spread of the gaps between displayed frames: the stutter that an average fps hides.
+    frameGapMs: b.decoded > a.decoded ? +(((b.ifd - a.ifd) / (b.decoded - a.decoded)) * 1000).toFixed(1) : null,
+    frameGapSpreadMs: b.decoded > a.decoded ? +(Math.sqrt(Math.max(0, (b.ifd2 - a.ifd2) / (b.decoded - a.decoded) - ((b.ifd - a.ifd) / (b.decoded - a.decoded)) ** 2)) * 1000).toFixed(1) : null,
     decodeMsPerFrame: b.decoded > a.decoded ? +(((b.dec - a.dec) / (b.decoded - a.decoded)) * 1000).toFixed(2) : null,
     viewerDropped: (b.dropped ?? 0) - (a.dropped ?? 0), freezes: (b.freezes ?? 0) - (a.freezes ?? 0), lost: (b.lost ?? 0) - (a.lost ?? 0),
     resolution: `${b.w}x${b.h}`, decoder: b.decoder,
