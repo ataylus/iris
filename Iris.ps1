@@ -31,7 +31,7 @@ $startParty = {
         $deadline = (Get-Date).AddSeconds($Seconds)
         while (-not (& $Test)) {
             if ((Get-Date) -gt $deadline) { throw $Failure }
-            Start-Sleep -Seconds 2
+            Start-Sleep -Seconds 1
         }
     }
     function Get-Tailnet { try { tailscale status --json | ConvertFrom-Json } catch { $null } }
@@ -83,7 +83,11 @@ $startParty = {
                 docker compose down *> $null
                 throw 'The network lockdown failed, so the party was stopped to stay safe. Open Iris again to retry.'
             }
-            $state.ClockOff = (docker logs iris-firewall-1 2>&1 | Out-String) -match 'tick:\s+(\d+)' -and [math]::Abs([int]$Matches[1] - 10000) -gt 50
+            $state.Warning = if ((docker logs iris-firewall-1 2>&1 | Out-String) -match 'tick:\s+(\d+)' -and [math]::Abs([int]$Matches[1] - 10000) -gt 50) {
+                "Video will stutter: this laptop's Linux clock is running at the wrong speed. See Troubleshooting."
+            } elseif ((Get-NetConnectionProfile -InterfaceAlias Tailscale -ErrorAction SilentlyContinue).NetworkCategory -eq 'Public') {
+                'Guests may lag: Windows treats the Tailscale network as Public. See Troubleshooting.'
+            }
             $state.Lockdown = 'done'
 
             $state.Browser = 'busy'
@@ -111,6 +115,8 @@ if ($Stop) { & $stopParty $root @{}; return }
 $mutex = New-Object Threading.Mutex($false, 'IrisWatchParty')
 if (-not $Snapshot -and -not $mutex.WaitOne(0)) { return }
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+# Keeps Windows from sleeping while a party is live, the way a video player does.
+Add-Type -Namespace Iris -Name Power -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);'
 
 $peopleFile = Join-Path $root 'people.json'
 $settingsFile = Join-Path $root 'settings.json'
@@ -336,7 +342,8 @@ function Update-View {
         if ($script:shownLive) { return }
         $script:shownLive = $true
         $ui.Headline.Text = "You're live"
-        $ui.Sub.Text = if ($state.ClockOff) { "Live, but this laptop's Linux clock is running at the wrong speed, so video will stutter. See Troubleshooting." } elseif ($script:switching) { 'Back live. Everyone, you included, needs to refresh their page.' } elseif ($state.Gpu) { 'Copy a link for your guest, then press play.' } else { 'Running without the graphics card, so the picture is capped at 30 fps.' }
+        [void][Iris.Power]::SetThreadExecutionState(2147483649)
+        $ui.Sub.Text = if ($state.Warning) { $state.Warning } elseif ($script:switching) { 'Back live. Everyone, you included, needs to refresh their page.' } elseif ($state.Gpu) { 'Copy a link for your guest, then press play.' } else { 'Running without the graphics card, so the picture is capped at 30 fps.' }
         $script:switching = $null
         $ui.OpenView.IsEnabled = $true
         $ui.Pupil.Opacity = 1
@@ -348,6 +355,7 @@ function Update-View {
     }
     if ($script:shownLive) {
         $script:shownLive = $false
+        [void][Iris.Power]::SetThreadExecutionState(2147483648)
         $ui.OpenView.IsEnabled = $false
         $ui.Pupil.Opacity = 0.3
         Show-Guests

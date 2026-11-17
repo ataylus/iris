@@ -13,8 +13,10 @@ const stats = `(async () => {
   for (const pc of window.__pcs || []) { const s = await pc.getStats(); s.forEach(r => {
     if (r.type === 'inbound-rtp' && r.kind === 'video') Object.assign(out, { decoded: r.framesDecoded, bytes: r.bytesReceived, jb: r.jitterBufferDelay, jbn: r.jitterBufferEmittedCount, freezes: r.freezeCount, lost: r.packetsLost, decoder: r.decoderImplementation, codecId: r.codecId, ifd: r.totalInterFrameDelay, ifd2: r.totalSquaredInterFrameDelay, dropped: r.framesDropped, recv: r.framesReceived, pkts: r.packetsReceived, nack: r.nackCount, disc: r.packetsDiscarded });
     if (r.type === 'codec' && r.mimeType && r.mimeType.startsWith('video')) out.codec = r.mimeType;
-    if (r.type === 'inbound-rtp' && r.kind === 'audio') out.audioBytes = r.bytesReceived;
-  }); }
+    if (r.type === 'inbound-rtp' && r.kind === 'audio') Object.assign(out, { audioBytes: r.bytesReceived, aSamples: r.totalSamplesReceived, aConcealed: r.concealedSamples });
+    if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') { out.pairLocal = r.localCandidateId; out.rtt = r.currentRoundTripTime; }
+  });
+  const local = out.pairLocal && s.get(out.pairLocal); if (local) out.path = (local.protocol || '') + '/' + (local.candidateType || ''); }
   return JSON.stringify(out); })()`;
 
 function rpc(ws) {
@@ -52,7 +54,7 @@ const a = await evaluate(); const t0 = Date.now();
 await sleep(10000);
 const b = await evaluate(); const secs = (Date.now() - t0) / 1000;
 console.log(JSON.stringify({
-  window: [new Date(t0).toISOString(), new Date().toISOString()], browser, codec: b.codec, decoder: b.decoder, resolution: `${b.w}x${b.h}`, paused: b.paused,
+  window: [new Date(t0).toISOString(), new Date().toISOString()], browser, path: b.path, rttMs: b.rtt != null ? +(b.rtt * 1000).toFixed(1) : null, codec: b.codec, decoder: b.decoder, resolution: `${b.w}x${b.h}`, paused: b.paused,
   fps: b.decoded != null ? +((b.decoded - a.decoded) / secs).toFixed(1) : null,
   mbps: b.bytes != null ? +(((b.bytes - a.bytes) * 8) / secs / 1e6).toFixed(2) : null,
   jitterBufferMs: b.jbn > a.jbn ? +(((b.jb - a.jb) / (b.jbn - a.jbn)) * 1000).toFixed(1) : null,
@@ -61,6 +63,7 @@ console.log(JSON.stringify({
   frameGapSpreadMs: b.decoded > a.decoded ? +(Math.sqrt(Math.max(0, (b.ifd2 - a.ifd2) / (b.decoded - a.decoded) - ((b.ifd - a.ifd) / (b.decoded - a.decoded)) ** 2)) * 1000).toFixed(1) : null,
   framesReceived: (b.recv ?? 0) - (a.recv ?? 0), viewerDropped: (b.dropped ?? 0) - (a.dropped ?? 0),
   packetsPerSec: +(((b.pkts ?? 0) - (a.pkts ?? 0)) / secs).toFixed(1), nacks: (b.nack ?? 0) - (a.nack ?? 0), discarded: (b.disc ?? 0) - (a.disc ?? 0),
+  audioConcealedPct: b.aSamples > a.aSamples ? +(((b.aConcealed - a.aConcealed) / (b.aSamples - a.aSamples)) * 100).toFixed(2) : null,
   freezes: (b.freezes ?? 0) - (a.freezes ?? 0), lost: (b.lost ?? 0) - (a.lost ?? 0), audio: (b.audioBytes ?? 0) > (a.audioBytes ?? 0),
 }));
 try { ws.close(); } catch {}

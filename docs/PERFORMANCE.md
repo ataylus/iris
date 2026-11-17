@@ -12,6 +12,9 @@ browser, joins as a viewer from a windowless Edge, and samples for 10 seconds:
 |---|---|
 | Stream fps, Mbps | Viewer's WebRTC stats (`framesDecoded`, `bytesReceived`) |
 | Jitter buffer | Viewer's `jitterBufferDelay / jitterBufferEmittedCount`; the delay the viewer adds to smooth arrival |
+| Frame gap and its spread | Viewer's `totalInterFrameDelay` and `totalSquaredInterFrameDelay`; the stutter an average fps hides |
+| Audio concealed or stretched | Viewer's `concealedSamples` and inserted/removed samples, as a share of audio received |
+| Shared Chrome drops | `getVideoPlaybackQuality()` in the test page, counted only while sampling |
 | Freezes, lost packets | Viewer's WebRTC stats |
 | Container CPU | `docker stats`, where 100% is one core |
 | GPU | `nvidia-smi` inside the container (overall %, encoder %) |
@@ -35,7 +38,7 @@ steady 60 fps in every test.
 Every configuration above stopped at 54 fps. That turned out not to be Iris at all: see "The 54 fps
 clock bug" below. With it fixed, the chosen configuration delivers 60.
 
-## Final check on the running Iris
+## Check on the running Iris, before the clock fix
 
 Joining as a guest from a windowless Firefox while 1080p video played:
 
@@ -72,6 +75,13 @@ Disabling it (see TROUBLESHOOTING.md) fixed it:
 | Gap between frames | 18.5 ms | 16.7 ms |
 | Viewer jitter buffer | 60 to 120 ms | 39 ms |
 
+Measured again after the fix, over the real path (Firefox viewer, through Tailscale to the live
+stack, 1080p test video playing):
+
+| Path | RTT | fps | Mbps | Frame gap | Jitter buffer | Lost | Audio concealed | Shared Chrome drops |
+|---|---|---|---|---|---|---|---|---|
+| UDP | 1 ms | 60 | 10.0 | 16.7 ± 1.8 ms | 12.5 ms | 0 | 0% | 0 during playback |
+
 Changing the kernel clock source (`clocksource=hyperv_clocksource_tsc_page` in `.wslconfig`) was
 tried first and did not help, so it was reverted. Iris now reads the kernel tick on every start and
 warns in the window if it is off by more than 0.5%.
@@ -82,7 +92,7 @@ Measured 2026-11-18 through the window, with the images already downloaded:
 
 | Action | Time |
 |---|---|
-| Containers created to shared browser healthy | 13 s (the health check probes every second while starting) |
+| Containers created to live | 7 to 13 s (the health check probes every second while starting) |
 | Opening Iris while a party is already running | 3 s |
 | Switching Saved/Fresh | 15 to 21 s |
 | End party | 4 s |

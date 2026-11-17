@@ -35,9 +35,12 @@ If starting with `gpu.yaml` fails, Iris retries without it, so a missing or brok
 3. Reads the mode from `settings.json` and checks for an NVIDIA GPU.
 4. If a healthy party is already running with the same address, mode and encoder (recorded in
    `.env`), reattaches. Otherwise it updates the browser image and recreates the containers.
-5. Waits for the firewall container to finish. If it failed, everything is shut down.
+5. Waits for the firewall container to finish. If it failed, everything is shut down. The firewall
+   also reports the kernel clock speed; Iris warns if it is off, or if the Tailscale network is Public.
 6. Waits for the shared browser to report healthy.
-7. Publishes it with `tailscale serve`, then opens your view.
+7. Publishes it with `tailscale serve`, then opens your view. While live, Iris asks Windows not
+   to sleep while its window is open (closing the lid still sleeps). After **Keep it running**,
+   your own sleep settings apply.
 8. Keeps checking the shared browser every 15 seconds. Two failed checks in a row show an error.
 
 Switching mode or clearing saved data sets a restart flag; the same loop then runs again from step 3.

@@ -43,6 +43,7 @@ const viewerStats = `(async () => {
   if (v) { const q = v.getVideoPlaybackQuality(); Object.assign(out, { w: v.videoWidth, h: v.videoHeight, shown: q.totalVideoFrames, dropped: q.droppedVideoFrames }); }
   for (const pc of window.__pcs || []) { const s = await pc.getStats(); s.forEach(r => {
     if (r.type === 'inbound-rtp' && r.kind === 'video') Object.assign(out, { decoded: r.framesDecoded, bytes: r.bytesReceived, jb: r.jitterBufferDelay, jbn: r.jitterBufferEmittedCount, dec: r.totalDecodeTime, freezes: r.freezeCount, decoder: r.decoderImplementation, lost: r.packetsLost, ifd: r.totalInterFrameDelay, ifd2: r.totalSquaredInterFrameDelay });
+    if (r.type === 'inbound-rtp' && r.kind === 'audio') Object.assign(out, { aSamples: r.totalSamplesReceived, aConcealed: r.concealedSamples, aStretched: (r.insertedSamplesForDeceleration || 0) + (r.removedSamplesForAcceleration || 0) });
     if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') out.rtt = r.currentRoundTripTime;
   }); }
   return out; })()`;
@@ -117,9 +118,14 @@ async function run(name) {
     frameGapMs: b.decoded > a.decoded ? +(((b.ifd - a.ifd) / (b.decoded - a.decoded)) * 1000).toFixed(1) : null,
     frameGapSpreadMs: b.decoded > a.decoded ? +(Math.sqrt(Math.max(0, (b.ifd2 - a.ifd2) / (b.decoded - a.decoded) - ((b.ifd - a.ifd) / (b.decoded - a.decoded)) ** 2)) * 1000).toFixed(1) : null,
     decodeMsPerFrame: b.decoded > a.decoded ? +(((b.dec - a.dec) / (b.decoded - a.decoded)) * 1000).toFixed(2) : null,
+    // Share of audio the viewer had to invent or time-stretch to hide gaps.
+    audioConcealedPct: b.aSamples > a.aSamples ? +(((b.aConcealed - a.aConcealed) / (b.aSamples - a.aSamples)) * 100).toFixed(2) : null,
+    audioStretchedPct: b.aSamples > a.aSamples ? +(((b.aStretched - a.aStretched) / (b.aSamples - a.aSamples)) * 100).toFixed(2) : null,
     viewerDropped: (b.dropped ?? 0) - (a.dropped ?? 0), freezes: (b.freezes ?? 0) - (a.freezes ?? 0), lost: (b.lost ?? 0) - (a.lost ?? 0),
     resolution: `${b.w}x${b.h}`, decoder: b.decoder,
     sharedBrowserFps: innerFps, sharedBrowserVideo: lastInner.replace(/^.*?(vdrop=\S+ vtotal=\S+ t=\S+).*$/, '$1'),
+    // Frames the shared Chrome itself dropped while the stream was being sampled, not since page load.
+    sharedBrowserDropsWhileSampling: (+(/vdrop=(\d+)/.exec(lastInner)?.[1] ?? NaN)) - (+(/vdrop=(\d+)/.exec(inner[0] || '')?.[1] ?? NaN)),
     containerCpuPct: cpu, gpu, log,
   };
 }

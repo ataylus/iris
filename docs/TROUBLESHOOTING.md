@@ -19,7 +19,8 @@
 | Guest: "session already connected" | Their account is open on another device or tab | Close the other one |
 | Page loads but the video spins forever | Browser cannot complete the video connection | Refresh once. If it persists, see "Video never connects" below |
 | No sound, or a play button over the video | The browser blocked autoplay | Click the video once |
-| "Linux clock is running at the wrong speed", or motion judders | A time service in a WSL distro is warping the shared kernel clock | See "WSL clock" below |
+| "Video will stutter: this laptop's Linux clock…", or motion judders | A time service in a WSL distro is warping the shared kernel clock | See "WSL clock" below |
+| "Guests may lag: Windows treats the Tailscale network as Public" | The Tailscale adapter's network profile changed | Settings, Network, Tailscale: set it to Private. Tailscale's own firewall rule only covers Private, so guests otherwise fall back to TCP |
 | Laggy or blocky picture | Relayed Tailscale connection, slow network, or TCP fallback | See "Lag" below |
 | A streaming site refuses to play | The site blocks Linux or software DRM | Try another site, or a sync extension for that one |
 
@@ -72,9 +73,11 @@ browser. Edge tolerated a value that Firefox rejected.
 
 1. During a party, run `tailscale ping <guest-device-name>`. `via DERP` means the connection is
    relayed through Tailscale's servers, which adds delay. A direct connection shows an IP address.
-2. If a guest is always on the TCP fallback, Windows Firewall on this laptop may be dropping their
-   UDP. Allowing inbound UDP 59000 on the Tailscale network adapter fixes it. Not tested with a real guest.
-3. On a weak guest connection, lower `bitrate` and `vbv-buffer-size` in `stack/gpu.yaml` (for example to 6000).
+2. Guests' UDP is allowed by Tailscale's own firewall rule (`Tailscale-In`), which covers the
+   Private and Domain profiles only. Iris warns if the Tailscale network is Public.
+3. On battery, Windows turns on Wi-Fi power saving, which can add delay for guests. Plug in.
+4. On a weak guest connection, lower `bitrate` and `vbv-buffer-size` in `stack/gpu.yaml` (for example to 6000).
+5. `node tools\viewer.mjs firefox "<link>"` prints `path` (`udp/...` is the fast path) and `rttMs`.
 
 ### Docker crashed once
 
