@@ -131,6 +131,7 @@ How this setup was verified, so you can repeat it after changing anything:
 
 ## Not verified
 
-- A real guest joining from another network, and how much delay that path adds.
+- How much delay a remote guest's path adds. (A real guest on another network joined and watched
+  successfully on 2026-11-18; it was not measured.)
 - Real streaming services with DRM.
 - The Tailscale access rule in GUESTS.md.
