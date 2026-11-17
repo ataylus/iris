@@ -50,7 +50,11 @@ Step 6 is quick because `docker-compose.yaml` overrides the image's health check
 second while starting (the image checks every 10 seconds).
 
 **End party** removes the Tailscale publishing and deletes the containers. The saved profile volume
-is kept. Closing the window instead offers to keep the party running.
+is kept. Closing the window instead offers to keep the party running. With **Also quit Docker and
+Tailscale** ticked (`quitApps` in `settings.json`), it then runs `docker desktop stop` and closes
+Tailscale's tray app. On Windows, Tailscale stays connected only while its tray app runs (unless
+"Run unattended" is on), so closing it disconnects; Iris reopens it on the next start, in parallel
+with Docker.
 
 ## The two modes
 

@@ -80,6 +80,40 @@
       <Setter Property="Width" Value="32"/>
       <Setter Property="Height" Value="32"/>
     </Style>
+
+    <Style x:Key="Tick" TargetType="CheckBox">
+      <Setter Property="Foreground" Value="{StaticResource Haze}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="CheckBox">
+            <StackPanel Orientation="Horizontal" Background="Transparent">
+              <Border x:Name="Box" Width="18" Height="18" CornerRadius="5" Background="{StaticResource Veil}"
+                      BorderBrush="#66ADA5CF" BorderThickness="1.5" VerticalAlignment="Center">
+                <Path x:Name="Mark" Data="M3.5,9 L7,12.5 L13.5,5" Stroke="{StaticResource Ink}" StrokeThickness="1.8"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Visibility="Collapsed"/>
+              </Border>
+              <ContentPresenter Margin="10,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Box" Property="Background" Value="{StaticResource Cloud}"/>
+                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Cloud}"/>
+                <Setter TargetName="Mark" Property="Visibility" Value="Visible"/>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="{StaticResource Cloud}"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Focus}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
 
   <Border Margin="20" CornerRadius="22">
@@ -174,6 +208,8 @@
           <Button x:Name="OpenView" Content="Open my view" Style="{StaticResource Main}" IsEnabled="False"/>
           <Button x:Name="EndParty" Grid.Column="2" Content="End party" Style="{StaticResource Plain}"/>
         </Grid>
+        <CheckBox x:Name="QuitApps" Content="Also quit Docker and Tailscale when the party ends" Style="{StaticResource Tick}"
+                  Margin="0,16,0,0" AutomationProperties.Name="Also quit Docker and Tailscale"/>
       </StackPanel>
 
       <Grid x:Name="Sheet" Visibility="Collapsed">

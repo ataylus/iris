@@ -7,6 +7,7 @@
 | Iris window never appears | It is already open (only one runs at a time) | Look for it on the taskbar |
 | "Docker Desktop is not installed" or "Tailscale is not installed" | The command is not on PATH | Install it (see the README), then open Iris again |
 | Video froze after switching Saved/Fresh | The restart ended everyone's session | Refresh the page |
+| Your other devices can't reach this laptop after a party | **Also quit Docker and Tailscale** is ticked, so Tailscale was closed | Open Tailscale from the Start menu, or untick the option |
 | Stuck on "Starting Docker" | Docker Desktop is slow to start or needs attention | Open Docker Desktop and check for a prompt |
 | Stuck on "Connecting to Tailscale", then "Iris stopped" | Tailscale is signed out or its login expired | Sign in from the Tailscale tray icon, then open Iris again |
 | "The network lockdown failed" | The firewall container could not apply its rules | Open Iris again. If it repeats, run `docker compose up firewall` in this folder to see the error |

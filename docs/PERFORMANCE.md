@@ -96,6 +96,8 @@ Measured 2026-11-18 through the window, with the images already downloaded:
 | Opening Iris while a party is already running | 3 s |
 | Switching Saved/Fresh | 15 to 21 s |
 | End party | 4 s |
+| End party with **Also quit Docker and Tailscale** | 28 s (`docker desktop stop` takes most of it) |
+| Opening Iris with Docker and Tailscale both closed, until both are ready | 14 to 17 s, then the usual start |
 
 ## DRM
 

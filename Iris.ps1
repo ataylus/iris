@@ -21,6 +21,11 @@ $stopParty = {
     tailscale serve --https=443 off *> $null
     tailscale serve --tcp=59000 off *> $null
     docker compose down *> $null
+    if ((Get-Content settings.json -Raw | ConvertFrom-Json).quitApps) {
+        docker desktop stop *> $null
+        # Without "Run unattended", Tailscale disconnects when its tray app exits; Iris reopens it next time.
+        Get-Process tailscale-ipn -ErrorAction SilentlyContinue | Stop-Process -Force
+    }
     $state.Stopped = $true
 }
 
@@ -41,13 +46,13 @@ $startParty = {
             if (-not (Get-Command $app.Key -ErrorAction SilentlyContinue)) { throw "$($app.Value) is not installed. Install it, then open Iris again." }
         }
         $state.Docker = 'busy'
+        if ((Get-Tailnet).BackendState -ne 'Running') { Start-Process "$env:ProgramFiles\Tailscale\tailscale-ipn.exe" }
         docker info *> $null
         if ($LASTEXITCODE) { Start-Process "$env:ProgramFiles\Docker\Docker\Docker Desktop.exe" }
         Wait-For { docker info *> $null; -not $LASTEXITCODE } 240 'Docker Desktop did not start. Open it, then open Iris again.'
         $state.Docker = 'done'
 
         $state.Tailscale = 'busy'
-        if ((Get-Tailnet).BackendState -ne 'Running') { Start-Process "$env:ProgramFiles\Tailscale\tailscale-ipn.exe" }
         Wait-For { (Get-Tailnet).BackendState -eq 'Running' } 90 'Tailscale is not connected. Sign in from its tray icon, then open Iris again.'
         $tailnet = Get-Tailnet
         $address = 'TS_IP=' + ($tailnet.TailscaleIPs | Where-Object { $_ -notmatch ':' } | Select-Object -First 1)
@@ -122,6 +127,11 @@ $peopleFile = Join-Path $root 'people.json'
 $settingsFile = Join-Path $root 'settings.json'
 function Get-People { Get-Content $peopleFile -Raw | ConvertFrom-Json }
 function Get-Mode { (Get-Content $settingsFile -Raw | ConvertFrom-Json).mode }
+function Save-Setting($name, $value) {
+    $settings = Get-Content $settingsFile -Raw | ConvertFrom-Json
+    $settings | Add-Member $name $value -Force
+    [IO.File]::WriteAllText($settingsFile, ($settings | ConvertTo-Json))
+}
 
 function Save-People($people) {
     [IO.File]::WriteAllText($peopleFile, ($people | ConvertTo-Json -Depth 4))
@@ -179,7 +189,7 @@ $window.Icon = [Windows.Media.Imaging.BitmapFrame]::Create([Uri](Join-Path $root
 $ui = @{}
 'Headline', 'Sub', 'Ring', 'Pupil', 'GuestList', 'NewGuest', 'Placeholder', 'AddGuest', 'GuestNote', 'OpenView', 'EndParty',
 'Minimize', 'Close', 'Sheet', 'SheetNote', 'SheetEnd', 'SheetKeep', 'SheetCancel', 'ModeSaved', 'ModeFresh', 'ModeNote',
-'ClearSaved' | ForEach-Object { $ui[$_] = $window.FindName($_) }
+'ClearSaved', 'QuitApps' | ForEach-Object { $ui[$_] = $window.FindName($_) }
 $ui.Ring.Source = New-Object Windows.Media.Imaging.BitmapImage ([Uri](Join-Path $root 'assets\ring.png'))
 
 $brushes = New-Object Windows.Media.BrushConverter
@@ -238,7 +248,7 @@ function Show-Mode {
 
 function Set-Mode($mode) {
     if ($mode -eq (Get-Mode) -or -not $state.Live) { return }
-    [IO.File]::WriteAllText($settingsFile, (@{ mode = $mode } | ConvertTo-Json))
+    Save-Setting mode $mode
     $script:switching = "Switching to $($mode.Substring(0,1).ToUpper() + $mode.Substring(1))"
     $state.Restart = $true
     $state.Live = $false
@@ -378,7 +388,8 @@ function Stop-FromWindow {
     $script:ending = $true
     $ui.Sheet.Visibility = 'Collapsed'
     $ui.Headline.Text = 'Closing up'
-    $ui.Sub.Text = if ((Get-Mode) -eq 'saved') { 'Closing the shared browser' } else { 'Wiping the shared browser' }
+    $ui.Sub.Text = $(if ((Get-Mode) -eq 'saved') { 'Closing the shared browser' } else { 'Wiping the shared browser' }) +
+        $(if ($ui.QuitApps.IsChecked) { ', then quitting Docker and Tailscale' } else { '' })
     $ui.EndParty.IsEnabled = $false
     $ui.OpenView.IsEnabled = $false
     $ui.ModeSaved.IsEnabled = $false
@@ -397,6 +408,8 @@ $ui.EndParty.Add_Click({ if ($state.Live -or $state.Error) { Stop-FromWindow } }
 $ui.ModeSaved.Add_Click({ Set-Mode 'saved' })
 $ui.ModeFresh.Add_Click({ Set-Mode 'fresh' })
 $ui.ClearSaved.Add_Click({ Clear-Saved })
+$ui.QuitApps.Add_Checked({ Save-Setting quitApps $true })
+$ui.QuitApps.Add_Unchecked({ Save-Setting quitApps $false })
 $ui.SheetEnd.Add_Click({ Stop-FromWindow })
 $ui.SheetKeep.Add_Click({ $script:leaving = $true; $window.Close() })
 $ui.SheetCancel.Add_Click({ $ui.Sheet.Visibility = 'Collapsed' })
@@ -421,6 +434,7 @@ $window.Add_Closing({
 if (-not (Test-Path $settingsFile)) { [IO.File]::WriteAllText($settingsFile, '{"mode": "fresh"}') }
 if (-not (Test-Path $peopleFile)) { Save-People ([pscustomobject]@{ host = [pscustomobject]@{ name = 'Host'; password = New-Password }; guests = @() }) }
 if (-not $Snapshot) { Save-People (Get-People) }
+$ui.QuitApps.IsChecked = [bool](Get-Content $settingsFile -Raw | ConvertFrom-Json).quitApps
 Show-Guests
 Show-Mode
 Set-Ring 0

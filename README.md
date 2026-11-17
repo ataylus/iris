@@ -36,6 +36,11 @@ distros, make sure none runs its own time service; it warps Docker's clock and m
 Closing the window asks whether to end the party or leave it running. If you leave it running,
 opening Iris again reattaches to it.
 
+You never need to open Docker Desktop or Tailscale yourself: Iris starts both. Tick **Also quit
+Docker and Tailscale when the party ends** to have them closed again afterwards. This frees
+Docker's memory, and this laptop leaves your tailnet until Iris (or you) opens Tailscale again.
+Ending then takes about 30 seconds.
+
 ## Saved or Fresh
 
 The **Browser** switch in the window picks how the shared Chrome behaves between parties.
