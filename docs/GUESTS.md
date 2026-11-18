@@ -55,17 +55,27 @@ admin console.
 - **To change a password**, remove the guest and add them again, then send the new invite.
   Your own password is in `people.json`; edit it there while Iris is closed.
 
-## Recommended: limit what shared users can reach
+## Limit what shared users can reach (applied)
 
-By default, someone you share the laptop with can try any open port on it, including Windows file
-sharing. In the Tailscale admin console under **Access controls**, restrict shared users to the
-two ports Iris uses. Replace `100.x.y.z` with this laptop's Tailscale address (shown in `.env`):
+Tailscale's default policy lets someone you share the laptop with try any open port on it,
+including Windows file sharing. This tailnet's policy restricts shared users to the two ports Iris
+uses. If it is ever reset, open the Tailscale admin console, go to **Access controls**, then
+**JSON editor**, and use this as the whole file. Replace `100.x.y.z` with this laptop's Tailscale
+address (shown in `.env`):
 
 ```json
-"acls": [
-  {"action": "accept", "src": ["autogroup:member"], "dst": ["*:*"]},
-  {"action": "accept", "src": ["autogroup:shared"], "dst": ["100.x.y.z:443,59000"]}
-]
+{
+    "grants": [
+        {"src": ["autogroup:member"], "dst": ["*"], "ip": ["*"]},
+        {"src": ["autogroup:shared"], "dst": ["100.x.y.z"], "ip": ["443", "59000"]},
+    ],
+}
 ```
 
-This snippet has not been validated against your account. Check it in the editor's preview before saving.
+This also leaves out Funnel and Tailscale SSH, which Iris does not need. To check that it applied:
+
+```powershell
+(& "C:\Program Files\Tailscale\tailscale.exe" debug netmap | ConvertFrom-Json).PacketFilter
+```
+
+Shared users' addresses should list only `443` and `59000` on this laptop.

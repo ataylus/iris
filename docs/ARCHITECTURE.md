@@ -115,8 +115,9 @@ Docker publishes the web and TCP ports on loopback only, so nothing listens on W
   browser reads is hashed.
 - **Invite links contain the guest's password**, so they sit in chat history and browser history.
   Remove and re-add a guest to issue a new one.
-- **A shared Tailscale user can reach every open port on this laptop**, not just Iris, unless you
-  restrict it. See the access rule in [GUESTS.md](GUESTS.md).
+- **The limit on shared users lives in the Tailscale policy, not in Iris.** It restricts them to
+  ports 443 and 59000. If the policy is reset, or the laptop's Tailscale address changes, they can
+  reach every open port again until the rule is updated. See [GUESTS.md](GUESTS.md).
 - **The lockdown starts a moment after the browser.** The firewall container can only join the
   browser's network once it exists, so Chrome's first second or two (in Saved mode, reopening
   your tabs) runs before the rules apply. Nobody can drive the browser until Iris goes live.

@@ -109,6 +109,7 @@ Run these in this folder.
 | `docker volume ls` | Lists volumes; `iris_profile` is the saved browser |
 | `tailscale serve status` | What is published to the tailnet. Empty when Iris is stopped |
 | `tailscale funnel status` | Should never list anything; Funnel would mean public exposure |
+| `(tailscale debug netmap \| ConvertFrom-Json).PacketFilter` | Who can reach this laptop. Shared users should get only ports 443 and 59000 |
 
 ## Testing changes
 
